@@ -5,6 +5,7 @@ import requests
 from flask import Flask, jsonify, request
 from werkzeug.utils import secure_filename
 import os
+import configparser
 
 import transcript_manager
 
@@ -15,7 +16,7 @@ MAX_TOKENS = 2000
 
 @app.after_request
 def add_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = 'https://app.takeaction.ai'
+    response.headers['Access-Control-Allow-Origin'] = 'https://app.takeaction.ai' #'https://app.takeaction.ai'
     return response
 
 def allowed_file(filename):
@@ -33,16 +34,18 @@ def configure_service():
     app.config['UPLOAD_FOLDER'] = './'
 
 
-def call_whisper_api(url_audio_file, open_api_key):
+
+
+def call_whisper_api(url_audio_file, openai_key):
     """
     Note: Currently supports only files MP3 and is locally stored
     """
-    # url_audio_file = "C:\\Users\\alche\\Downloads\\(Audio) IdealFruitsTranslateOnly_2023-04-21T14_22_02.117Z.mp3"
+
     transcript = None
     with open(url_audio_file, "rb") as f:
-        #print(open_api_key)
-        openai.api_key = open_api_key
-        transcript = openai.Audio.transcribe("whisper-1", f)
+
+
+        transcript = openai.Audio.transcribe(model= "whisper-1", file=f, api_key=openai_key)
     # Create an empty string
     res = ''
     
@@ -53,12 +56,12 @@ def call_whisper_api(url_audio_file, open_api_key):
     return res
 
 
-def call_openai_chat(prompt, open_api_key):
-    openai.api_key = open_api_key       
+def call_openai_chat(prompt, openai_key):
 
-    chatResponse = openai.ChatCompletion.create(
+
+    chatResponse = openai.ChatCompletion.create(api_key=openai_key,
         model="gpt-3.5-turbo",
-
+        
         messages=[
             {"role": "user", "content": prompt}, 
             {"role": "system", "content": """You are an assistant that only speaks JSON. Do not write normal text.
@@ -78,7 +81,7 @@ def call_openai_chat(prompt, open_api_key):
                 "item 2",
                 "item 3"
             ],
-            "arguments": [
+            "transcript_arguments": [
                 "item 1",
                 "item 2",
                 "item 3"
@@ -100,7 +103,7 @@ def call_openai_chat(prompt, open_api_key):
 @app.route('/upload', methods=['POST'])
 def upload_file():
     print("received file")
-    print(request.form)
+    #print(request.form)
     
     path_file = ''
     # Check if the file is present in the request
@@ -145,8 +148,10 @@ def upload_file():
     return jsonify(response_api), 200
 
 def run_service_logic(full_path_audio_file, request_data):
-    open_api_key = request_data.form.get('openAI_key')
-    audio_transcript = call_whisper_api(full_path_audio_file, open_api_key)
+    openai_key = request_data.form.get('openAI_key')
+
+
+    audio_transcript = call_whisper_api(full_path_audio_file, openai_key)
     #print("audio_transcript => " + audio_transcript + "\n\n\n")
     #audio_transcript = "Try from here. Yeah, now you try. Check, check, one, two, three, check. Stop recording."
     #with open("./transcript.txt") as f:
@@ -162,9 +167,9 @@ def run_service_logic(full_path_audio_file, request_data):
     response_summary_list = []
     for part_transcript in split_transcript:
         prompt = transcript_manager.create_prompt_for_chat(part_transcript, request_data)
-        print("prompt => " + prompt + "\n\n\n")
-        response_summary = call_openai_chat(prompt=prompt, open_api_key=open_api_key)
-        print("response =>" + json.dumps(response_summary)+ '\n\n')
+        #print("prompt => " + prompt + "\n\n\n")
+        response_summary = call_openai_chat(prompt=prompt, openai_key=openai_key)
+        #print("response =>" + json.dumps(response_summary)+ '\n\n')
         response_summary_list.append(response_summary)
 
     formated_document_details = transcript_manager.structure_response(response_summary_list, request_data)
@@ -182,6 +187,10 @@ def health_check():
 
 if __name__ == '__main__':
     configure_service()
+    config = configparser.RawConfigParser()
+    config.read('./config.cfg')
 
-    app.run()
+    config_details = dict(config.items('SECTION_NAME'))
+
+    app.run(host=config_details['HOST_NAME'], port=config_details['PORT_NUMBER'])
 

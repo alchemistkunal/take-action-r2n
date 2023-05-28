@@ -1,0 +1,11 @@
+# Alchemist Lab
+User-agent: *
+Disallow: /
+
+User-agent: Googlebot
+Disallow: /
+
+User-agent: Bingbot
+Disallow: /
+
+# Reference: https://www.robotstxt.org/robotstxt.html
